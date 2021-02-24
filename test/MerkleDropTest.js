@@ -15,7 +15,6 @@ const Lock = artifacts.require("Lock");
 require("chai").use(require("chai-bignumber")(BN)).should();
 
 const denominator = new BN(10).pow(new BN(16));
-
 const getWith16Decimals = function (amount) {
   return new BN(amount).mul(denominator);
 };
@@ -56,8 +55,8 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token.address,
         160,
-        "0xhash",
         "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a",
+        1614150598,
         1616068615,
         "true"
       );
@@ -69,8 +68,8 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
+        1614150598,
         1616068615,
         "false",
         {
@@ -85,8 +84,8 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token.address,
         160,
-        "0xhash",
         "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a",
+        1614150598,
         1631966215,
         "false",
         {
@@ -97,19 +96,15 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
+        1614150598,
         1631966215,
         "true"
       );
 
-      var vaultAddress = [
-        await merkle.getAirDropValutAddress(
-          "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a"
-        ),
-        await merkle.getAirDropValutAddress(
-          "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85"
-        ),
+      var hex = [
+        "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a",
+        "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
       ];
       var proof = [
         ["0x2a7335270534e59e7706f81b43e93be7137d9609329d150b02332ba4f2bd7aea"],
@@ -121,7 +116,7 @@ contract("MerkleDrop", () => {
       var amount = ["50", "50"];
       var index = ["1", "1"];
       assert.isTrue(
-        await merkle.claim.call(vaultAddress, proof, index, amount, {
+        await merkle.claim.call(hex, proof, index, amount, {
           from: accounts[2],
         })
       );
@@ -133,9 +128,9 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token.address,
         160,
-        "0xhash",
         "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a",
-        1616068615,
+        1613113274,
+        1613286074,
         "false",
         {
           value: getWith16Decimals(5),
@@ -145,19 +140,15 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
-        1613650585,
+        1613113274,
+        1613286074,
         "true"
       );
 
-      var vaultAddress = [
-        await merkle.getAirDropValutAddress(
-          "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a"
-        ),
-        await merkle.getAirDropValutAddress(
-          "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85"
-        ),
+      var hex = [
+        "0xd44fec381892e6c49b756000d0ea0745eb3eceb4e380095d41ea5755e3bcf97a",
+        "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
       ];
       var proof = [
         ["0x2a7335270534e59e7706f81b43e93be7137d9609329d150b02332ba4f2bd7aea"],
@@ -168,8 +159,9 @@ contract("MerkleDrop", () => {
       ];
       var amount = ["50", "50"];
       var index = ["1", "1"];
+
       try {
-        await merkle.claim(vaultAddress, proof, index, amount, {
+        await merkle.claim(hex, proof, index, amount, {
           from: accounts[2],
         });
       } catch (error) {}
@@ -181,21 +173,18 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x1344f60b7c027761ab12f07f61c04297b298fb90743cc0b0f9a598bf5b4fdf68",
-        1612944105,
+        1612162874,
+        1612422074,
         "false",
         {
-          from: accounts[0],
           value: getWith16Decimals(5),
         }
       );
-      var vaultAddress = await merkle.getAirDropValutAddress(
+      var vaultAddress = await merkle.vaultAddress.call(
         "0x1344f60b7c027761ab12f07f61c04297b298fb90743cc0b0f9a598bf5b4fdf68"
       );
-      await merkle.sendTokenBackToAirDropper(vaultAddress, {
-        from: accounts[0],
-      });
+      await merkle.sendTokenBackToAirDropperByVault(vaultAddress);
     });
   });
 
@@ -204,8 +193,8 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85",
+        1614150598,
         1631966215,
         "false",
         {
@@ -213,11 +202,11 @@ contract("MerkleDrop", () => {
           value: getWith16Decimals(5),
         }
       );
-      var vaultAddress = await merkle.getAirDropValutAddress(
+      var vaultAddress = await merkle.vaultAddress.call(
         "0x5f726e8b1ef32651e49545967f8b01a458b58e85e7d66b52e299c735c7d43b85"
       );
       try {
-        await merkle.sendTokenBackToAirDropper(vaultAddress, {
+        await merkle.sendTokenBackToAirDropperByVault(vaultAddress, {
           from: accounts[0],
         });
       } catch (error) {}
@@ -232,20 +221,18 @@ contract("MerkleDrop", () => {
       await merkle.createAirDrop(
         token1.address,
         160,
-        "0xhash",
         "0x1344f60b7c027761ab12f07f61c04297b298fb90743cc0b0f9a598bf5b4fdf68",
-        1612944105,
+        1612162874,
+        1612422074,
         "false",
         {
           from: accounts[0],
           value: getWith16Decimals(5),
         }
       );
-      var vaultAddress = await merkle.getAirDropValutAddress(
-        "0x1344f60b7c027761ab12f07f61c04297b298fb90743cc0b0f9a598bf5b4fdf68"
-      );
+      var hex = "0x1344f60b7c027761ab12f07f61c04297b298fb90743cc0b0f9a598bf5b4fdf68";
       try {
-        await merkle.sendTokenBackToAirDropper(vaultAddress, {
+        await merkle.sendTokenBackToAirDropperByHex(hex, {
           from: accounts[3],
         });
       } catch (error) {}
