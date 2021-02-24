@@ -39,7 +39,6 @@ abstract contract MerkleDropStorage {
      *  airdropCreator - token airdropCreator
      * 'tokenAddress '  - token's contract address
      *  'amount' - amount of tokens to be airdropped
-     *  'ipfsHash' - ipfsHash of the csv file
      *  'rootHash' -  merkle root hash
      *  'airdropDate' - airdrop creation date
      *  'airdropExpirationDate'- token's airdrop Exipration Date
@@ -47,10 +46,9 @@ abstract contract MerkleDropStorage {
     struct MerkleAirDrop {
         address airdropCreator; 
         address tokenAddress; 
-        string ipfsHash; 
         bytes32 rootHash; 
         uint256 amount; 
-        uint256 airdropDate; 
+        uint256 airdropStartDate; 
         uint256 airdropExpirationDate;
        
     }
@@ -64,12 +62,12 @@ abstract contract MerkleDropStorage {
         uint256 _airdropExpirationDate
     );
 
-    event Claimed(address indexed account, uint256 amount, uint256 timestamp);
+    event Claimed(address indexed account, uint256 amount, address vault);
 
     //Mapping
-    mapping(address => MerkleAirDrop) internal airdroppedtokens;
-    mapping(address => mapping(uint256 => bool)) internal claimedMap;
-    mapping(bytes32 => address) internal vaultAddress;
+    mapping(address => MerkleAirDrop) public airdroppedtokens;
+    mapping(address => mapping(uint256 => bool)) public claimedMap;
+    mapping(bytes32 => address) public vaultAddress;
     
 }
 
@@ -109,68 +107,47 @@ contract MerkleDrop is MerkleDropStorage,SafeMath,Ownable {
      * @param
      * ' _token '  - token's contract address
      *  ' _amount' - amount of tokens to be airdropped
-     *  '_ipfsHash' - ipfsHash of the csv file
      *  '_root' -  merkle root hash
+     *  '_airdropStartDate' airdrop start date
      *  '_airdropExpirationDate'- token's airdrop Exipration Date
      *  '_paymentInToken' - pay in tokens
      */
     function createAirDrop(
         address _token, 
         uint256 _amount, 
-        string memory _ipfsHash,
         bytes32 _root, 
+        uint256  _airdropStartDate,
         uint256 _airdropExpirationDate,
         bool _paymentInToken
     ) external payable returns (bool) {
-        TokenVault vault = new TokenVault(address(this), _token);
         if(_paymentInToken){
-            
             IERC20(tokenAddress).transferFrom(msg.sender,walletAddress,feeInToken);
-         }
+        }
         else{
             (bool success,) = walletAddress.call{value:feeInEth}(new bytes(0));
-             require(success,"ERR_TRANSFER_FAILED");
+            require(success,"ERR_TRANSFER_FAILED");
         }
+        require(vaultAddress[_root] == address(0),"ERR_HASH_ALREADY_CREATED");
+        TokenVault vault = new TokenVault(address(this), _token);
         safeTransferFrom(_token, msg.sender, address(vault), _amount);
-        MerkleAirDrop memory merkledrop = MerkleAirDrop(msg.sender,_token, _ipfsHash, _root,_amount,now,_airdropExpirationDate);
+        MerkleAirDrop memory merkledrop = MerkleAirDrop(msg.sender,_token, _root,_amount,_airdropStartDate,_airdropExpirationDate);
         airdroppedtokens[address(vault)] = merkledrop;
         vaultAddress[_root] = address(vault);
         emit AirDropSubmitted(msg.sender,_token,_amount,now,_airdropExpirationDate);
         return true;
     }
 
-     //To get the merkle root hash of the airdropped token
-    function getRoot(address _vault) internal view returns (bytes32) {
-        MerkleAirDrop memory merkledrop = airdroppedtokens[_vault];
-        return merkledrop.rootHash;
-    }
-    //To get the vault address of airdrop token
-    function getAirDropValutAddress(bytes32 root)external view returns (address) {
-        return vaultAddress[root];
-    }
-    
-    //To get the airdropCreator
-    function getAirDropCreator(address _vault) internal view returns (address) {
-        MerkleAirDrop memory merkledrop = airdroppedtokens[_vault];
-        return merkledrop.airdropCreator;
-    }
-    //To determine whether airdrop has expired or not
-    function airdropHasExpired(address _vault) internal view returns (bool) {
-        MerkleAirDrop memory merkledrop = airdroppedtokens[_vault];
-        return (now > merkledrop.airdropExpirationDate);
-    }
-    
     //To set token fee 
-    function setTokenFee(uint256 _fee)external onlyOwner(){
+    function setTokenFee(uint256 _fee) external onlyOwner(){
         feeInToken = _fee;
     }
     
     //To set eth fee
-    function setEthFee(uint256 _fee)external onlyOwner(){
+    function setEthFee(uint256 _fee) external onlyOwner(){
         feeInEth = _fee;
     }
     
-    //To set fee in token
+    //To set walletAddress
     function setWalletAddress(address _walletAddress)external onlyOwner(){
         walletAddress = _walletAddress;
     }
@@ -179,29 +156,32 @@ contract MerkleDrop is MerkleDropStorage,SafeMath,Ownable {
      * @dev to claim the airdropped tokens.
      * 
      *  @param
-     * ' _vault'  - vault Address
+     * ' _hex'  - hex bytes
      *  ' _proof' - merkle proof
      *  'index' - address index
-     *  '_amount' -  amount of token to bec claimed
+     *  '_amount' -  amount of token to be claimed
      */
     function claim(
-        address[] memory _vault,
+        bytes32[] memory _hex,
         bytes32[][] memory _proof,
         uint256[] memory index,
         uint256[] memory amount
     ) external returns (bool) {
         address _userAddress = msg.sender;
-        for (uint256 i = 0; i < _vault.length; i++) {
-                require(!airdropHasExpired(_vault[i]),"ERR_AIRDROP_HAS_EXPIRED");
-                require(!claimedMap[_vault[i]][index[i]],"ERR_AIRDROP_ALREADY_CLAIMED");
-                bytes32 root = getRoot(_vault[i]);
-                bytes32 node = keccak256(abi.encodePacked(index[i], _userAddress, amount[i]));
-                bytes32[] memory proof = _proof[i];
-                if (MerkleProof.verify(proof, root, node)){
-                    TokenVault(_vault[i]).transferToken(msg.sender,amount[i]);
-                    claimedMap[_vault[i]][index[i]] = true;
-                    emit Claimed(msg.sender, amount[i], now);
-                }
+        for (uint256 i = 0; i < _hex.length; i++) {
+            address vault = vaultAddress[_hex[i]];
+            MerkleAirDrop memory merkledrop = airdroppedtokens[vault];
+            require(now > merkledrop.airdropStartDate ,"ERR_AIRDROP_NOT_STARTED");
+            require(merkledrop.airdropExpirationDate > now,"ERR_AIRDROP_HAS_EXPIRED");
+            require(!claimedMap[vault][index[i]],"ERR_AIRDROP_ALREADY_CLAIMED");
+            bytes32 root = merkledrop.rootHash;
+            bytes32 node = keccak256(abi.encodePacked(index[i], _userAddress, amount[i]));
+            bytes32[] memory proof = _proof[i];
+            if (MerkleProof.verify(proof, root, node)){
+                TokenVault(vault).transferToken(msg.sender,amount[i]);
+                claimedMap[vault][index[i]] = true;
+                emit Claimed(msg.sender, amount[i],vault);
+            }
         }
         return true;
     }
@@ -212,11 +192,26 @@ contract MerkleDrop is MerkleDropStorage,SafeMath,Ownable {
      *  @param
      * ' _vault'  - vault Address
      */
-    function sendTokenBackToAirDropper(address _vault) external returns (bool) {
-        address _creator = getAirDropCreator(_vault);
-        require(_creator == msg.sender, "ERR_NOT_AUTHORIZED");
-        require(airdropHasExpired(_vault), "ERR_TOKEN_AIRDROP_HASNOT_EXPIRED");
-        TokenVault(_vault).transferToken(_creator,IERC20(TokenVault(_vault).token()).balanceOf(_vault));
+    function sendTokenBackToAirDropperByVault(address _vault) external returns (bool) {
+        MerkleAirDrop memory merkledrop = airdroppedtokens[_vault];
+        require(merkledrop.airdropCreator == msg.sender, "ERR_NOT_AUTHORIZED");
+        require(merkledrop.airdropExpirationDate < now, "ERR_TOKEN_AIRDROP_HASNOT_EXPIRED");
+        TokenVault(_vault).transferToken(merkledrop.airdropCreator,IERC20(TokenVault(_vault).token()).balanceOf(_vault));
+        return true;
+    }
+    
+    /**
+     * @dev to send the airdropped tokens back to AirDropper.
+     * 
+     *  @param
+     * ' _hex'  - hex bytes
+     */
+    function sendTokenBackToAirDropperByHex(bytes32 _hex) external returns (bool) {
+        address _vault = vaultAddress[_hex];
+        MerkleAirDrop memory merkledrop = airdroppedtokens[_vault];
+        require(merkledrop.airdropCreator == msg.sender, "ERR_NOT_AUTHORIZED");
+        require(merkledrop.airdropExpirationDate < now, "ERR_TOKEN_AIRDROP_HASNOT_EXPIRED");
+        TokenVault(_vault).transferToken(merkledrop.airdropCreator,IERC20(TokenVault(_vault).token()).balanceOf(_vault));
         return true;
     }
     
@@ -228,4 +223,3 @@ contract MerkleDrop is MerkleDropStorage,SafeMath,Ownable {
         revert();
     }  
 }
-
